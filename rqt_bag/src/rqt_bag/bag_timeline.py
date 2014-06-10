@@ -34,6 +34,7 @@ import rospy
 import rosbag
 import time
 import threading
+import rosgraph_msgs
 
 
 from python_qt_binding.QtCore import Qt, QTimer, qWarning, Signal
@@ -57,7 +58,7 @@ class BagTimeline(QGraphicsScene):
     status_bar_changed_signal = Signal()
     selected_region_changed = Signal(rospy.Time, rospy.Time)
 
-    def __init__(self, context, publish_clock):
+    def __init__(self, context, clock_rate):
         """
         :param context: plugin context hook to enable adding rqt_bag plugin widgets as ROS_GUI snapin panes, ''PluginContext''
         """
@@ -81,7 +82,6 @@ class BagTimeline(QGraphicsScene):
         self._messages = {}  # topic -> (bag, msg_data)
         self._message_listener_threads = {}  # listener -> MessageListenerThread
         self._player = False
-        self._publish_clock = publish_clock
         self._recorder = None
         self.last_frame = None
         self.last_playhead = None
@@ -91,6 +91,16 @@ class BagTimeline(QGraphicsScene):
         self._play_timer = QTimer()
         self._play_timer.timeout.connect(self.on_idle)
         self._play_timer.setInterval(3)
+
+        # Clock handling
+        self._clock_publisher = None
+        self._last_clock = rospy.Time(0)
+        if clock_rate:
+            self._clock_interval = rospy.Duration(1.0/clock_rate)
+            self._publish_clock = True
+        else:
+            self._clock_interval = rospy.Duration(0)
+            self._publish_clock = False
 
         # Plugin popup management
         self._context = context
@@ -498,7 +508,12 @@ class BagTimeline(QGraphicsScene):
             try:
                 self._player = Player(self)
                 if self._publish_clock:
-                    self._player.start_clock_publishing()
+                    try:
+                        self._clock_publisher = rospy.Publisher('/clock',
+                                rosgraph_msgs.msg.Clock, queue_size=100)
+                    except TypeError:
+                        self._clock_publisher = rospy.Publisher('/clock',
+                                rosgraph_msgs.msg.Clock)
             except Exception as ex:
                 qWarning('Error starting player; aborting publish: %s' % str(ex))
                 return False
@@ -513,6 +528,14 @@ class BagTimeline(QGraphicsScene):
         else:
             for topic in self._timeline_frame.topics:
                 self.stop_publishing(topic)
+
+    def publish_clock(self, bag_time):
+        if self._clock_publisher:
+            if bag_time > self._last_clock + self._clock_interval:
+                self._last_clock = bag_time
+                time_msg = rosgraph_msgs.msg.Clock()
+                time_msg.clock = bag_time
+                self._clock_publisher.publish(time_msg)
 
     # property: play_all
     def _get_play_all(self):
@@ -551,6 +574,8 @@ class BagTimeline(QGraphicsScene):
             self.step_next_message()
         else:
             self.step_fixed()
+
+        self.publish_clock(self._timeline_frame.playhead)
 
     def step_fixed(self):
         """

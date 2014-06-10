@@ -58,7 +58,7 @@ class BagWidget(QWidget):
 
     set_status_text = Signal(str)
 
-    def __init__(self, context, publish_clock):
+    def __init__(self, context, clock_rate):
         """
         :param context: plugin context hook to enable adding widgets as a ROS_GUI pane, ''PluginContext''
         """
@@ -69,7 +69,7 @@ class BagWidget(QWidget):
 
         self.setObjectName('BagWidget')
 
-        self._timeline = BagTimeline(context, publish_clock)
+        self._timeline = BagTimeline(context, clock_rate)
         self.graphics_view.setScene(self._timeline)
 
         self.graphics_view.resizeEvent = self._resizeEvent

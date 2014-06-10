@@ -51,7 +51,11 @@ class Bag(Plugin):
 
         args = self._parse_args(context.argv())
 
-        self._widget = BagWidget(context, args.clock)
+        clock_rate = None
+        if args.clock:
+            clock_rate = args.hz
+
+        self._widget = BagWidget(context, clock_rate)
         if context.serial_number() > 1:
             self._widget.setWindowTitle(self._widget.windowTitle() + (' (%d)' % context.serial_number()))
         context.add_widget(self._widget)
@@ -78,7 +82,10 @@ class Bag(Plugin):
     @staticmethod
     def add_arguments(parser):
         group = parser.add_argument_group('Options for rqt_bag plugin')
-        group.add_argument('--clock', action='store_true', help='publish the clock time')
+        group.add_argument('--clock', action='store_true',
+                           help='publish the clock time')
+        group.add_argument('--hz', default=100, type=float,
+                           help='use a frequency of HZ when publishing clock time')
         group.add_argument('bagfiles', type=lambda x: Bag._isfile(parser, x),
                            nargs='*', default=[], help='Bagfiles to load')
 
